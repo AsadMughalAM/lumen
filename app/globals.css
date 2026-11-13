@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  background: #101010;
+}
+
+body {
+  font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 1px solid #ffb02e;
+  outline-offset: 3px;
+}
+
+@layer components {
+  /* Small uppercase label: the only typographic voice besides the wordmark. */
+  .label {
+    font-size: 10.5px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  /* Minimal slider: a hairline track that warms as it fills. */
+  .range {
+    --fill: 50%;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 18px;
+    background: transparent;
+    cursor: pointer;
+  }
+  .range:disabled {
+    cursor: not-allowed;
+  }
+  .range:focus {
+    outline: none;
+  }
+  .range::-webkit-slider-runnable-track {
+    height: 1px;
+    background:
+      linear-gradient(90deg, #ff6500, #ffb02e) 0 0 / var(--fill) 100% no-repeat,
+      rgba(255, 255, 255, 0.14);
+  }
+  .range::-moz-range-track {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.14);
+  }
+  .range::-moz-range-progress {
+    height: 1px;
+    background: linear-gradient(90deg, #ff6500, #ffb02e);
+  }
+  .range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 11px;
+    height: 11px;
+    margin-top: -5px;
+    border-radius: 999px;
+    background: #f2ede6;
+    box-shadow: 0 0 0 3px #101010;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+  }
+  .range::-moz-range-thumb {
+    width: 11px;
+    height: 11px;
+    border: 0;
+    border-radius: 999px;
+    background: #f2ede6;
+    box-shadow: 0 0 0 3px #101010;
+  }
+  .range:not(:disabled):hover::-webkit-slider-thumb {
+    transform: scale(1.2);
+    box-shadow: 0 0 0 3px #101010, 0 0 14px rgba(255, 140, 50, 0.55);
+  }
+  .range:focus-visible::-webkit-slider-thumb {
+    box-shadow: 0 0 0 3px #101010, 0 0 0 4px #ffb02e;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+  }
+}
