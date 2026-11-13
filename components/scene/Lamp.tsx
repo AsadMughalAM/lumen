@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import * as THREE from "three";
 import { useFrame, type ThreeEvent } from "@react-three/fiber";
 
-import { LAMP, PALETTE, type LightRig } from "@/lib/types";
+import { BREAK_DEPTH, LAMP, PALETTE, type LightRig } from "@/lib/types";
 
 /**
  * The hanging lamp: cable, anodised socket, glass tube and filament, plus the
@@ -50,6 +50,52 @@ function tubeGeometry(radius: number) {
     pts.push(new THREE.Vector2(Math.cos(a) * radius, -(len - radius) - Math.sin(a) * radius));
   }
   return new THREE.LatheGeometry(pts, 64);
+}
+
+/**
+ * What's left of the glass after it cracks: the upper part of the tube, still
+ * held by the socket, ending in a jagged, uneven break. The edge zig-zags
+ * between ~35% and ~65% of the tube's length.
+ */
+function brokenTubeGeometry(radius: number) {
+  const seg = 72;
+  const rows = 18;
+  // Deterministic jagged edge: a slow wander plus sharp alternating spikes.
+  let seed = 7;
+  const rand = () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+  const edge: number[] = [];
+  for (let i = 0; i < seg; i++) {
+    const wander = 0.5 + 0.5 * Math.sin(i * 0.19 + 1.3) * Math.cos(i * 0.07);
+    const spike = i % 3 === 0 ? rand() * 0.35 : -rand() * 0.12;
+    const t = Math.min(Math.max(wander * 0.75 + spike, 0), 1);
+    edge.push(-(BREAK_DEPTH.min + (BREAK_DEPTH.max - BREAK_DEPTH.min) * t));
+  }
+
+  const positions: number[] = [];
+  const indices: number[] = [];
+  for (let r = 0; r <= rows; r++) {
+    for (let i = 0; i <= seg; i++) {
+      const a = (i / seg) * Math.PI * 2;
+      const y = 0.02 + (edge[i % seg] - 0.02) * (r / rows);
+      positions.push(Math.cos(a) * radius, y, Math.sin(a) * radius);
+    }
+  }
+  const row = seg + 1;
+  for (let r = 0; r < rows; r++) {
+    for (let i = 0; i < seg; i++) {
+      const a = r * row + i;
+      const b = a + row;
+      indices.push(a, b, a + 1, b, b + 1, a + 1);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  g.setIndex(indices);
+  g.computeVertexNormals();
+  return g;
 }
 
 /** The U-shaped element: down one leg, round the bottom, up the other. */
@@ -109,8 +155,8 @@ function heatColor(t: number, out: THREE.Color) {
 export default function Lamp({ rig, shadows, onBreak }: LampProps) {
   const pivotRef = useRef<THREE.Group>(null);
   const bulbRef = useRef<THREE.Group>(null);
-  const filamentRef = useRef<THREE.Group>(null);
   const glassRef = useRef<THREE.Mesh>(null);
+  const brokenRef = useRef<THREE.Mesh>(null);
   const lightRef = useRef<THREE.PointLight>(null);
 
   const onGlassOver = (e: ThreeEvent<PointerEvent>) => {
@@ -141,6 +187,7 @@ export default function Lamp({ rig, shadows, onBreak }: LampProps) {
       connector: new THREE.CylinderGeometry(0.05, 0.065, 0.14, 32),
       socket: socketGeometry(),
       glass: tubeGeometry(LAMP.tubeRadius),
+      brokenGlass: brokenTubeGeometry(LAMP.tubeRadius),
       filament: new THREE.TubeGeometry(filamentCurve(), 220, 0.016, 12, false),
       support: new THREE.CylinderGeometry(0.011, 0.011, Math.abs(FIL_BOTTOM - FIL_TOP) - 0.12, 10),
       mouth: new THREE.CylinderGeometry(LAMP.tubeRadius + 0.012, LAMP.tubeRadius + 0.012, 0.05, 48, 1, true),
@@ -195,29 +242,30 @@ export default function Lamp({ rig, shadows, onBreak }: LampProps) {
 
     // ---- Break / replace ----
     const bulb = bulbRef.current;
-    const fil = filamentRef.current;
     const glass = glassRef.current;
-    if (bulb && fil && glass) {
+    const broken = brokenRef.current;
+    if (bulb && glass && broken) {
       const tubeTop = LAMP.socketTop - LAMP.socketHeight;
-      if (r.broken) {
-        // Glass gone (the shards take over); the snapped filament tumbles out.
-        glass.visible = false;
-        const since = (performance.now() - r.breakTime) / 1000;
-        fil.visible = since < 2.2;
-        fil.position.set(since * 0.25, -4.2 * since * since, since * 0.4);
-        fil.rotation.set(since * 0.9, 0, since * 1.8);
-        bulb.position.y = tubeTop;
-        bulb.rotation.y = 0;
-      } else {
-        // Intact, or a new bulb rising and turning as it screws in.
-        glass.visible = true;
-        fil.visible = true;
-        fil.position.set(0, 0, 0);
-        fil.rotation.set(0, 0, 0);
-        const rise = 1 - r.fit;
-        bulb.position.y = tubeTop - rise * 3.4;
-        bulb.rotation.y = rise * Math.PI * 4;
+      // The cracked remnant shows from the break until the old bulb is out
+      // (fit runs -1 -> 0 while unscrewing it, 0 -> 1 while fitting the new one).
+      const showBroken = r.broken || r.fit < 0;
+      glass.visible = !showBroken;
+      broken.visible = showBroken;
+      let drop = 0;
+      let turn = 0;
+      if (r.fit < 0) {
+        // Unscrewing the broken bulb: it turns and drops out of the socket.
+        const k = 1 + r.fit;
+        drop = k * 3.4;
+        turn = -k * Math.PI * 4;
+      } else if (r.fit < 1) {
+        // The new bulb rises and turns as it screws in.
+        const k = 1 - r.fit;
+        drop = k * 3.4;
+        turn = k * Math.PI * 4;
       }
+      bulb.position.y = tubeTop - drop;
+      bulb.rotation.y = turn;
     }
     if (lightRef.current) {
       // Gentler falloff (decay 1.3) so the warmth reaches the edges of the room.
@@ -273,7 +321,7 @@ export default function Lamp({ rig, shadows, onBreak }: LampProps) {
 
         {/* The bulb: glass + filament. Shatters, falls away, and is replaced. */}
         <group ref={bulbRef} position={[0, tubeTopY, 0]}>
-          <group ref={filamentRef}>
+          <group>
           {/* Filament: U-shaped element and its central support */}
           <mesh geometry={geo.filament}>
             <meshStandardMaterial
@@ -323,6 +371,22 @@ export default function Lamp({ rig, shadows, onBreak }: LampProps) {
               envMapIntensity={1.4}
               attenuationColor="#ffffff"
               attenuationDistance={2}
+              specularIntensity={1}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+          {/* The cracked remnant left in the socket after a break: same glass, jagged edge. */}
+          <mesh ref={brokenRef} geometry={geo.brokenGlass} renderOrder={2} visible={false}>
+            <meshPhysicalMaterial
+              color="#ffffff"
+              transmission={1}
+              thickness={0.08}
+              roughness={0.06}
+              ior={1.47}
+              metalness={0}
+              clearcoat={1}
+              clearcoatRoughness={0.04}
+              envMapIntensity={1.6}
               specularIntensity={1}
               side={THREE.DoubleSide}
             />

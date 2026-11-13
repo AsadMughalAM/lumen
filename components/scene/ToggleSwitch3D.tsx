@@ -13,6 +13,10 @@ type ToggleSwitch3DProps = {
   shadows: boolean;
 };
 
+/** The point on the wall the camera centres on, for measuring the visible wall area. */
+const WALL_POINT = new THREE.Vector3(0, -0.26, LAMP.wallZ);
+const WALL_CENTER_Y = -0.26;
+
 const PLATE_W = 0.64;
 const PLATE_H = 0.98;
 const PLATE_D = 0.05;
@@ -49,10 +53,12 @@ function engravingTexture() {
 }
 
 export default function ToggleSwitch3D({ rig, onToggle, shadows }: ToggleSwitch3DProps) {
+  const groupRef = useRef<THREE.Group>(null);
   const paddleRef = useRef<THREE.Group>(null);
   const paddleMat = useRef<THREE.MeshPhysicalMaterial>(null);
   const stripeMat = useRef<THREE.MeshStandardMaterial>(null);
   const ledMat = useRef<THREE.MeshStandardMaterial>(null);
+  const locatorRef = useRef<THREE.PointLight>(null);
   const engraving = useMemo(engravingTexture, []);
   useEffect(() => () => engraving?.dispose(), [engraving]);
 
@@ -69,16 +75,28 @@ export default function ToggleSwitch3D({ rig, onToggle, shadows }: ToggleSwitch3
 
   const hoverAmount = useRef(0);
 
-  useFrame((_, rawDelta) => {
+  useFrame((state, rawDelta) => {
     const r = rig.current;
     const dt = Math.min(rawDelta, 1 / 30);
+
+    // Mounted in the top-right corner of the visible wall, at any screen size.
+    if (groupRef.current) {
+      const vp = state.viewport.getCurrentViewport(state.camera, WALL_POINT);
+      const margin = Math.min(0.75, vp.width * 0.16);
+      groupRef.current.position.x = vp.width / 2 - margin;
+      groupRef.current.position.y = WALL_CENTER_Y + vp.height / 2 - PLATE_H / 2 - 0.42;
+    }
     if (paddleRef.current) paddleRef.current.rotation.x = ROCK_OFF + (ROCK_ON - ROCK_OFF) * r.lever;
     hoverAmount.current += ((r.switchHover ? 1 : 0) - hoverAmount.current) * (1 - Math.exp(-dt * 12));
     // A faint warm edge on hover, so the rocker reads as the thing to press.
     if (paddleMat.current) paddleMat.current.emissiveIntensity = hoverAmount.current * 0.06;
-    // The orange stripe on the paddle glows with the circuit, like a pilot light.
-    if (stripeMat.current) stripeMat.current.emissiveIntensity = 0.15 + r.power * 2.2;
-    if (ledMat.current) ledMat.current.emissiveIntensity = 0.05 + r.power * 3.5;
+    // Locator light: like an illuminated wall switch, the stripe and LED glow
+    // softly in the dark so the switch can be found, and a tiny short-range light
+    // picks out the plate. Once the bulb is lit, it takes over lighting the switch.
+    const dark = 1 - Math.min(r.power, 1);
+    if (stripeMat.current) stripeMat.current.emissiveIntensity = 1.3 * dark + r.power * 2.2;
+    if (ledMat.current) ledMat.current.emissiveIntensity = 0.9 * dark + r.power * 3.5;
+    if (locatorRef.current) locatorRef.current.intensity = 0.55 * dark;
   });
 
   const over = (e: ThreeEvent<PointerEvent>) => {
@@ -101,10 +119,10 @@ export default function ToggleSwitch3D({ rig, onToggle, shadows }: ToggleSwitch3
   const z0 = PLATE_D / 2;
 
   return (
-    <group position={[LAMP.switchX, LAMP.switchY, LAMP.wallZ + PLATE_D / 2 + 0.002]}>
+    <group ref={groupRef} position={[1.2, 0.6, LAMP.wallZ + PLATE_D / 2 + 0.002]}>
       {/* Mounting plate: brushed dark metal. The whole plate is a click target. */}
       <RoundedBox args={[PLATE_W, PLATE_H, PLATE_D]} radius={0.02} smoothness={4} castShadow={shadows} receiveShadow={shadows} {...handlers}>
-        <meshPhysicalMaterial color="#232326" metalness={0.75} roughness={0.42} clearcoat={0.2} clearcoatRoughness={0.4} />
+        <meshPhysicalMaterial color="#2b2b2f" metalness={0.72} roughness={0.4} clearcoat={0.25} clearcoatRoughness={0.4} />
       </RoundedBox>
 
       {/* Engraved ON / OFF */}
@@ -151,6 +169,9 @@ export default function ToggleSwitch3D({ rig, onToggle, shadows }: ToggleSwitch3
           </mesh>
         </group>
       ))}
+
+      {/* Locator light: a faint warm glow just in front of the plate, only in the dark. */}
+      <pointLight ref={locatorRef} position={[0, 0.05, 0.45]} color="#ffb070" intensity={0.55} distance={1.6} decay={2} />
 
       {/* Status LED */}
       <mesh geometry={geo.led} position={[PLATE_W / 2 - 0.085, PLATE_H / 2 - 0.085, z0 + 0.006]}>

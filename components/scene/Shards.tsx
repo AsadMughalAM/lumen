@@ -4,9 +4,9 @@ import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 
-import { LAMP, type LightRig } from "@/lib/types";
+import { BREAK_DEPTH, LAMP, type LightRig } from "@/lib/types";
 
-const SHARDS = 90;
+const SHARDS = 46;
 const SPARKS = 40;
 const GRAVITY = -9.8 * 0.55;
 const SHARD_LIFE = 2.6;
@@ -87,27 +87,31 @@ export default function Shards({ rig }: { rig: MutableRefObject<LightRig> }) {
   const burst = (lit: boolean) => {
     const R = LAMP.tubeRadius;
     const len = LAMP.tubeLength;
-    shards.forEach((s) => {
+    // Only the part below the jagged break comes away; the top stays in the socket.
+    const breakTop = BREAK_DEPTH.min;
+    shards.forEach((s, i) => {
       const a = Math.random() * Math.PI * 2;
-      const along = Math.random();
-      // Points on the tube wall (and a few on its rounded end).
-      const y = tubeTop - along * (len - R) - (along > 0.9 ? Math.random() * R : 0);
-      s.p.set(Math.cos(a) * R, y, Math.sin(a) * R);
-      const out = 0.8 + Math.random() * 1.8;
-      s.v.set(Math.cos(a) * out, 0.6 + Math.random() * 1.6, Math.sin(a) * out + 0.6);
+      const depth = breakTop + Math.random() * (len - breakTop);
+      // Points on the lower tube wall and its rounded end.
+      const capR = depth > len - R ? Math.sqrt(Math.max(R * R - Math.pow(depth - (len - R), 2), 0)) : R;
+      s.p.set(Math.cos(a) * capR, tubeTop - depth, Math.sin(a) * capR);
+      // It's a crack, not an explosion: pieces mostly drop, with a little outward kick.
+      const out = 0.25 + Math.random() * 0.9;
+      s.v.set(Math.cos(a) * out, 0.1 + Math.random() * 0.6, Math.sin(a) * out + 0.25);
       s.r.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
-      s.w.set((Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18, (Math.random() - 0.5) * 18);
-      s.s = 0.5 + Math.pow(Math.random(), 2) * 1.6;
-      s.life = SHARD_LIFE * (0.7 + Math.random() * 0.3);
+      s.w.set((Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12);
+      // A handful of bigger chunks among the small splinters.
+      s.s = i < 5 ? 2.6 + Math.random() * 1.4 : 0.6 + Math.pow(Math.random(), 2) * 1.4;
+      s.life = SHARD_LIFE * (0.75 + Math.random() * 0.25);
     });
     sparks.forEach((s) => {
       if (!lit) {
         s.life = 0;
         return;
       }
-      s.p.set((Math.random() - 0.5) * 0.3, tubeTop - 0.4 - Math.random() * 1.2, (Math.random() - 0.5) * 0.1);
+      s.p.set((Math.random() - 0.5) * 0.3, tubeTop - breakTop - Math.random() * (len - breakTop), (Math.random() - 0.5) * 0.1);
       const a = Math.random() * Math.PI * 2;
-      const sp = 1.5 + Math.random() * 3.5;
+      const sp = 1 + Math.random() * 2.5;
       s.v.set(Math.cos(a) * sp, Math.random() * 2.5, Math.sin(a) * sp + 1);
       s.s = 0.6 + Math.random() * 0.9;
       s.life = SPARK_LIFE * (0.5 + Math.random() * 0.5);

@@ -64,6 +64,7 @@ export const LAMP = {
   tubeRadius: 0.235,
   tubeLength: 1.8,
   wallZ: -1.6,
-  switchX: 1.2,
-  switchY: -1.5,
 } as const;
+
+/** How far down the tube (from its top) the jagged break runs when the glass cracks. */
+export const BREAK_DEPTH = { min: 0.62, max: 1.18 } as const;

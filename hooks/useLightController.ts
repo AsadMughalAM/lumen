@@ -133,14 +133,19 @@ export function useLightController({ rig, audio, reducedMotion }: Options) {
 
     rig.broken = false;
     rig.power = 0;
-    rig.fit = 0;
+    // fit: -1 -> 0 unscrews the broken bulb and drops it out; 0 -> 1 screws the new one in.
+    rig.fit = -1;
     setBulbState("FITTING");
 
-    const fitTime = 1.3 * speed;
+    const outTime = 0.9 * speed;
+    const inTime = 1.3 * speed;
+    const fitTime = outTime + inTime;
     const tl = gsap.timeline();
     timeline.current = tl;
-    tl.to(rig, { fit: 1, duration: fitTime, ease: "power3.out" }, 0);
-    tl.call(() => audio.screwIn(fitTime * 0.85), [], 0.05);
+    tl.call(() => audio.screwIn(outTime * 0.8), [], 0.02);
+    tl.to(rig, { fit: 0, duration: outTime, ease: "power2.in" }, 0);
+    tl.to(rig, { fit: 1, duration: inTime, ease: "power3.out" }, outTime);
+    tl.call(() => audio.screwIn(inTime * 0.85), [], outTime + 0.05);
     tl.call(
       () => {
         setBulbState("INTACT");

@@ -227,12 +227,12 @@ export default function LumenExperience() {
           Sound {soundOn ? "on" : "off"}
         </button>
       </section>
-      {/* Mobile sound toggle sits top-right. */}
+      {/* On phones the sound toggle sits under the wordmark (the switch owns the top right). */}
       <button
         type="button"
         onClick={() => setSoundOn((s) => !s)}
         aria-pressed={soundOn}
-        className="label absolute right-5 top-5 rounded-full border border-white/12 px-3 py-1.5 text-white/75 md:hidden"
+        className="label absolute left-5 top-[76px] rounded-full border border-white/12 px-3 py-1.5 text-white/75 md:hidden"
       >
         Sound {soundOn ? "on" : "off"}
       </button>
