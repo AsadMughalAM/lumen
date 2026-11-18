@@ -69,7 +69,8 @@ export class AudioEngine {
   private applyHum(delay: number, timeConstant: number) {
     if (!this.ctx || !this.humGain) return;
     const at = this.ctx.currentTime + delay;
-    const target = this.humLevel * (0.35 + 0.65 * this.brightness) * 0.05;
+    // Kept well under the clicks: a faint presence, not a buzz (~-36 dB RMS when lit).
+    const target = this.humLevel * (0.35 + 0.65 * this.brightness) * 0.018;
     this.humGain.gain.setTargetAtTime(target, at, timeConstant);
     this.humFilter?.frequency.setTargetAtTime(380 + this.brightness * 520, at, 0.2);
   }
